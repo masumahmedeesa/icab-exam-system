@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICAB Accounting Exam – Chapter Ledger accounting and double entry</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, query, limit, doc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"; // Added deleteDoc
+
+        // Global Firebase variables (provided by Canvas environment)
+        // Using provided specific credentials directly
+        const firebaseConfig = {
+            apiKey: "AIzaSyCkK0Mx5sMn5c9crBETgDiPzrO5laL5wgY",
+            authDomain: "icab-e3f4b.firebaseapp.com",
+            projectId: "icab-e3f4b",
+            storageBucket: "icab-e3f4b.firebasestorage.app",
+            messagingSenderId: "98196468423",
+            appId: "1:98196468423:web:a1b2c3d4e5f6g7h8i9j0k1", // This is a placeholder, you might need to get your actual web app ID from Firebase console
+            databaseURL: "https://icab-e3f4b.firebaseio.com" // Added for completeness, though primarily for Realtime Database
+        };
+
+        const appId = firebaseConfig.projectId; // Use the projectId as appId for consistency with Firestore paths
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Expose to global scope for use in the main script
+        window.firebaseApp = app;
+        window.firebaseAuth = auth;
+        window.firebaseDb = db;
+        window.initialAuthToken = initialAuthToken;
+        window.appId = appId;
+        window.signInAnonymously = signInAnonymously;
+        window.signInWithCustomToken = signInWithCustomToken;
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.onAuthStateChanged = onAuthStateChanged;
+        window.signOut = signOut;
+        window.collection = collection;
+        window.addDoc = addDoc;
+        window.getDocs = getDocs;
+        window.query = query;
+        window.limit = limit;
+        window.doc = doc;
+        window.getDoc = getDoc;
+        window.deleteDoc = deleteDoc; // Expose deleteDoc
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .question-tracker-item {
+            transition: all 0.3s ease-in-out;
+        }
+        .question-tracker-item.active {
+            background-color: #3B82F6;
+            color: white;
+            transform: scale(1.1);
+        }
+        .question-tracker-item.answered {
+            background-color: #10B981;
+            color: white;
+        }
+        .question-tracker-item.flagged {
+            background-color: #F59E0B;
+            color: white;
+            box-shadow: 0 0 0 2px #F59E0B;
+        }
+        .explanation {
+            background-color: #e0f2fe;
+            border-left: 4px solid #0ea5e9;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 0 8px 8px 0;
+        }
+        .modal {
+            transition: opacity 0.3s ease;
+        }
+        .btn {
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .hidden {
+            display: none !important;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3B82F6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container mx-auto p-4 max-w-6xl">
+
+        <!-- Login Screen -->
+        <div id="login-screen" class="bg-white p-8 rounded-xl shadow-md text-center max-w-md mx-auto mt-10">
+            <h1 class="text-3xl font-bold text-gray-800 mb-6">Welcome to ICAB Exam Practice</h1>
+            <div class="flex justify-center mb-6">
+                <button id="student-login-tab" class="px-6 py-3 rounded-l-lg font-semibold text-lg bg-blue-500 text-white">Student</button>
+                <button id="admin-login-tab" class="px-6 py-3 rounded-r-lg font-semibold text-lg bg-gray-200 text-gray-700">Admin</button>
+            </div>
+
+            <!-- Student Login Section -->
+            <div id="student-login-section">
+                <p class="text-gray-600 mb-6">Log in as a student to start practicing quizzes.</p>
+                <input type="email" id="student-email-input" placeholder="Your Email Address" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-4">
+                <button id="student-login-btn" class="btn bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-lg text-lg w-full">Continue as Student</button>
+            </div>
+
+            <!-- Admin Login Section -->
+            <div id="admin-login-section" class="hidden">
+                <p class="text-gray-600 mb-6">Log in as an admin to manage questions.</p>
+                <form id="admin-login-form" class="space-y-4">
+                    <input type="email" id="admin-email" placeholder="Admin Email" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <input type="password" id="admin-password" placeholder="Admin Password" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <button type="submit" class="btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg w-full">Admin Login</button>
+                    <p id="admin-login-error" class="text-red-500 text-sm mt-2 hidden"></p>
+                </form>
+            </div>
+        </div>
+
+        <!-- Start Screen (after student login) -->
+        <div id="start-screen" class="bg-white p-8 rounded-xl shadow-md text-center max-w-3xl mx-auto mt-10 hidden">
+            <h1 class="text-3xl font-bold text-gray-800 mb-4">ICAB Accounting Exam Practice</h1>
+            <h2 class="text-xl font-semibold text-gray-700 mb-6">Topic: Ledger accounting and double entry</h2>
+            <p id="student-welcome-message" class="text-gray-600 mb-4"></p>
+            <div class="text-left border-t border-b py-6 my-6">
+                <h3 class="font-bold text-lg mb-3 text-center">Instructions</h3>
+                <ul class="list-disc list-inside mx-auto max-w-md space-y-2 text-gray-600">
+                    <li>This quiz contains a total of <strong id="total-questions-info"></strong> questions.</li>
+                    <li>You will have <strong id="time-limit-info"></strong> minutes to complete it.</li>
+                    <li>The quiz includes single-choice and multiple-choice questions.</li>
+                    <li>You can use the 'Flag for Review' button to mark questions for later.</li>
+                    <li>Click the 'Submit' button when you have answered all questions.</li>
+                </ul>
+            </div>
+            <button id="start-quiz-btn" class="btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg">Start Quiz</button>
+            <button id="logout-btn-student" class="btn bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-lg text-lg ml-4">Logout</button>
+
+            <div class="mt-8 p-4 bg-gray-50 rounded-lg">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Your Activities & Exams (Future Feature)</h3>
+                <p class="text-gray-600">This section would display your past exam results, progress, and available examinations.</p>
+                <p class="text-sm text-gray-500 mt-2">Implementing this requires a more complex user data model and persistent storage of exam attempts linked to your email in Firebase Firestore.</p>
+            </div>
+        </div>
+
+        <!-- Admin Panel Screen -->
+        <div id="admin-panel-screen" class="hidden">
+            <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">Admin Panel</h1>
+            <div class="bg-white p-8 rounded-xl shadow-md max-w-3xl mx-auto">
+                <h2 class="text-2xl font-semibold text-gray-700 mb-6">Upload New Question</h2>
+                <form id="upload-question-form" class="space-y-4">
+                    <div>
+                        <label for="question-text" class="block text-gray-700 font-bold mb-2">Question Text:</label>
+                        <textarea id="question-text" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" rows="3" required></textarea>
+                    </div>
+                    <div id="options-container">
+                        <label class="block text-gray-700 font-bold mb-2">Options:</label>
+                        <div class="flex items-center mb-2">
+                            <input type="text" class="option-input w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Option 1" required>
+                            <input type="checkbox" class="correct-option-checkbox ml-3 w-5 h-5">
+                            <span class="ml-1 text-gray-600 text-sm">Correct</span>
+                        </div>
+                        <div class="flex items-center mb-2">
+                            <input type="text" class="option-input w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Option 2" required>
+                            <input type="checkbox" class="correct-option-checkbox ml-3 w-5 h-5">
+                            <span class="ml-1 text-gray-600 text-sm">Correct</span>
+                        </div>
+                    </div>
+                    <button type="button" id="add-option-btn" class="btn bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm">Add Option</button>
+                    <div>
+                        <label for="question-topic" class="block text-gray-700 font-bold mb-2">Topic:</label>
+                        <input type="text" id="question-topic" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" required>
+                    </div>
+                    <div>
+                        <label for="question-explanation" class="block text-gray-700 font-bold mb-2">Explanation:</label>
+                        <textarea id="question-explanation" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" rows="3" required></textarea>
+                    </div>
+                    <button type="submit" class="btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg w-full">Upload Question</button>
+                    <p id="upload-message" class="text-center mt-4"></p>
+                </form>
+
+                <hr class="my-8">
+
+                <h2 class="text-2xl font-semibold text-gray-700 mb-6">Manage Existing Questions</h2>
+                <div id="admin-questions-list" class="space-y-4">
+                    <p class="text-center text-gray-500">Loading questions...</p>
+                </div>
+
+                <hr class="my-8">
+
+                <h2 class="text-2xl font-semibold text-gray-700 mb-6">Examinations & Student Management (Future Feature)</h2>
+                <p class="text-gray-600">This section would allow you to create specific examinations, assign them to students, and view student progress and results.</p>
+                <p class="text-sm text-gray-500 mt-2">Implementing a full examination system and comprehensive student management requires a more complex data model and user interface, beyond the scope of a single HTML file.</p>
+            </div>
+            <button id="logout-btn-admin" class="btn bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-lg text-lg mt-6 mx-auto block">Logout</button>
+        </div>
+
+        <!-- Quiz Screen -->
+        <div id="quiz-screen" class="hidden">
+            <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">ICAB Accounting Exam – Chapter Ledger accounting and double entry</h1>
+            <div class="flex flex-col lg:flex-row gap-6">
+                <!-- Left Side: Question Tracker -->
+                <div class="lg:w-1/4">
+                    <div class="bg-white p-4 rounded-xl shadow-md sticky top-4">
+                        <h2 class="font-bold text-lg mb-3 text-gray-700">Question Tracker</h2>
+                        <div id="question-tracker" class="grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-5 gap-2">
+                            <!-- Tracker items will be inserted here by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Side: Quiz -->
+                <div class="lg:w-3/4">
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <div class="flex justify-between items-center mb-4 border-b pb-4">
+                            <div id="timer" class="text-2xl font-bold text-indigo-600">--:--</div>
+                            <button id="flag-btn" class="btn bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 6a3 3 0 013-3h10a1 1 0 01.8 1.6L14.25 8l2.55 4.4A1 1 0 0116 14H6a1 1 0 01-1-1V6z" clip-rule="evenodd" /></svg>
+                                <span id="flag-btn-text">Flag for Review</span>
+                            </button>
+                        </div>
+                        <div id="quiz-content" class="min-h-[200px]">
+                            <!-- Quiz questions will be displayed here -->
+                            <div class="flex justify-center items-center h-48">
+                                <div class="spinner"></div>
+                                <p class="ml-4 text-gray-600">Loading questions...</p>
+                            </div>
+                        </div>
+                        <div class="mt-6 flex justify-between">
+                            <button id="prev-btn" class="btn bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg">Previous</button>
+                            <button id="next-btn" class="btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">Next</button>
+                            <button id="submit-btn" class="btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg">Submit</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Confirmation Modal -->
+        <div id="confirm-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full hidden z-50 flex items-center justify-center">
+            <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md mx-4">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Confirm Submission</h3>
+                <p id="confirm-text" class="text-gray-600 mb-6">Are you sure you want to submit?</p>
+                <div class="flex justify-end gap-4">
+                    <button id="cancel-submit-btn" class="btn bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-6 rounded-lg">Cancel</button>
+                    <button id="confirm-submit-btn" class="btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg">Submit Anyway</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Modal -->
+        <div id="results-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full hidden z-40">
+            <div class="relative top-10 mx-auto p-5 border w-11/12 md:max-w-3xl lg:max-w-4xl shadow-lg rounded-xl bg-white">
+                <div class="mt-3 text-center">
+                    <h3 class="text-2xl leading-6 font-bold text-gray-900 mb-4">Quiz Results</h3>
+                    <div class="mt-2 px-4 sm:px-7 py-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div class="bg-blue-100 p-4 rounded-lg"><p id="score" class="text-xl font-bold text-blue-800"></p></div>
+                            <div class="bg-green-100 p-4 rounded-lg"><p id="percentage" class="text-lg text-green-800 font-semibold"></p></div>
+                        </div>
+
+                        <div class="my-6 p-4 bg-gray-50 rounded-lg">
+                            <h4 class="font-bold text-lg text-gray-700 mb-4">Topic Performance</h4>
+                            <canvas id="topicChart"></canvas>
+                        </div>
+
+                        <div id="practice-topics" class="mt-6 text-left bg-gray-50 p-4 rounded-lg">
+                            <h4 class="font-bold text-lg text-gray-700">Topics to Review</h4>
+                            <ul id="practice-list" class="list-disc list-inside mt-2 text-gray-600"></ul>
+                        </div>
+
+                        <div id="results-details" class="mt-6 text-left max-h-[50vh] overflow-y-auto pr-2">
+                           <!-- Detailed results will be shown here -->
+                        </div>
+                    </div>
+                    <div class="items-center px-4 py-3 mt-4">
+                        <button id="close-modal-btn" class="btn px-6 py-3 bg-blue-500 text-white text-base font-medium rounded-lg w-full shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                            Review Complete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <footer class="text-center text-gray-600 mt-10 pb-6 text-sm leading-relaxed">
+        <p class="font-semibold">Prepared by:</p>
+        <p>K-M Mahafuzul Alam</p>
+        <p>
+            <a href="https://www.linkedin.com/in/k-m-mahafuzul-alam" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">
+                🔗 https://www.linkedin.com/in/k-m-mahafuzul-alam
+            </a>
+        </p>
+        <p>📞 WhatsApp: 01728-928984</p>
+        <p>📧 Email: kmmhafuzulalam@gmail.com</p>
+    </footer>
+
+    <script type="module">
+        // Default quiz data (used if no questions are fetched from Firebase)
+        const defaultQuizData = [
+            { question: "The credit side of a journal entry may:", options: ["Increase sales", "Increase expenses", "Decrease trade payables", "Increase trade receivables"], correct: 0, topic: 'Journal Entries', explanation: "A credit entry increases liabilities, capital, and income. Sales are income, so a credit increases sales." },
+            { question: "The nominal ledger is:", options: ["The record of all non-computerised transactions", "Used only for receivables transactions", "Used only for payables transactions", "The record of an entity’s financial transactions"], correct: 3, topic: 'The Nominal Ledger', explanation: "The nominal ledger is the main accounting record, containing all accounts for assets, liabilities, equity, income, and expenses." },
+            { question: "A debit entry in a T-account will:", options: ["Decrease an asset", "Decrease an expense", "Increase a liability", "Decrease capital"], correct: 3, topic: 'Double-Entry Bookkeeping', explanation: "A debit entry decreases liabilities, capital, and income. It increases assets and expenses. Therefore, decreasing capital is a correct effect of a debit." },
+            { question: "A credit entry in a T-account will:", options: ["Decrease an asset", "Increase an expense", "Decrease a liability", "Decrease capital"], correct: 0, topic: 'Double-Entry Bookkeeping', explanation: "A credit entry decreases assets and expenses. It increases liabilities, capital, and income. Therefore, decreasing an asset is a correct effect of a credit." },
+            { question: "When a credit customer pays an invoice for £120 including VAT at 20%, the credit entry in the VAT account will be:", options: ["£120", "£100", "£20", "Nil"], correct: 3, topic: 'Accounting for VAT', explanation: "The VAT is recorded when the invoice is raised (Dr Receivables, Cr Sales, Cr VAT). Payment only affects the bank and receivables accounts (Dr Bank, Cr Receivables)." },
+            { question: "Early settlement discounts received from suppliers will:", options: ["Decrease purchases", "Decrease sales", "Increase trade payables", "Increase trade receivables"], correct: 0, topic: 'Accounting for Discounts', explanation: "An early settlement discount received reduces the cost of the goods, thus decreasing the purchases expense." },
+            { question: "A journal entry does not need to contain:", options: ["The name of the ledger account to be debited", "The name of the ledger account to be credited", "A narrative", "The name of the source document"], correct: 3, topic: 'Journal Entries', explanation: "A journal must have debit/credit accounts and a narrative. The source document name is not a required field in the journal format itself." },
+            { question: "When petty cash is topped up to the imprest amount, the credit entry is made to:", options: ["The petty cash account", "Trade receivables", "Cash at bank account", "Trade payables"], correct: 2, topic: 'Petty Cash', explanation: "To restore the petty cash float, cash is transferred from the bank. The entry is Dr Petty Cash, Cr Cash at Bank." },
+            { question: "Individual credit customer accounts are kept in which ledger?", options: ["Payables ledger", "Trade receivables account", "Receivables ledger", "Nominal ledger"], correct: 2, topic: 'Receivables & Payables Ledgers', explanation: "The receivables ledger is a subsidiary ledger containing individual accounts for each credit customer." },
+            { question: "A business buys goods on credit from a supplier. What is the correct double entry?", options: ["Debit Purchases, Credit Cash", "Debit Supplier, Credit Purchases", "Debit Purchases, Credit Payables", "Debit Payables, Credit Purchases"], correct: 2, topic: 'Double-Entry Bookkeeping', explanation: "Buying goods on credit increases the purchases expense (Debit) and increases the liability to the supplier (Credit Payables)." },
+            { question: "A business sells goods for £2,400 including 20% VAT. The correct entry for revenue is:", options: ["Credit Sales £2,400", "Credit Sales £2,000", "Debit Sales £2,400", "Debit Sales £2,000"], correct: 1, topic: 'Accounting for VAT', explanation: "Revenue is recorded net of VAT. Gross amount is £2,400 (120%). Net revenue = £2,400 / 1.20 = £2,000. An increase in revenue is a credit." },
+            { question: "A trade discount is:", options: ["A discount for early payment", "Recorded in a separate 'discounts allowed' account", "Deducted from the list price before recording the transaction", "Only offered on cash sales"], correct: 2, topic: 'Accounting for Discounts', explanation: "A trade discount is a reduction from the list price and is deducted before the transaction is recorded. Sales and purchases are recorded net of trade discounts." },
+            { question: "The 'duality concept' in accounting implies that every transaction:", options: ["Must be recorded in two different currencies", "Has two equal and opposite effects on the accounting equation", "Is recorded twice in the same account", "Must be approved by two people"], correct: 1, topic: 'Double-Entry Bookkeeping', explanation: "The duality concept is the foundation of double-entry, stating every transaction has two effects that keep the accounting equation (Assets = Liabilities + Equity) in balance." },
+            { question: "A business registered for VAT buys a machine for £120,000 inclusive of 20% VAT. What is the cost of the machine to be recorded in non-current assets?", options: ["£120,000", "£100,000", "£96,000", "£144,000"], correct: 1, topic: 'Accounting for VAT', explanation: "For a VAT-registered business, reclaimable VAT is not part of the asset's cost. The cost is the net amount: £120,000 / 1.20 = £100,000." },
+            { question: "Which of the following accounts normally has a credit balance?", options: ["Purchases", "Machinery (at cost)", "Sales Revenue", "Rent Expense"], correct: 2, topic: 'The Nominal Ledger', explanation: "Income accounts (Sales Revenue) normally have credit balances. Asset (Machinery) and expense (Purchases, Rent) accounts normally have debit balances." },
+        ];
+
+        let quizData = []; // This will be populated from Firebase or default data
+        let currentQuestion = 0;
+        let userAnswers = [];
+        let flaggedQuestions = [];
+        let timerInterval;
+        let topicChart = null;
+        const TIME_LIMIT_MINUTES = 40; // Default time limit
+
+        // Firebase variables - declared here, assigned in authenticateUser
+        let auth;
+        let db;
+        let currentAppId; // Changed from 'appId' to avoid conflict with global 'appId'
+        let initialAuthToken;
+
+        // User role tracking
+        let currentUserRole = null; // 'student', 'admin', or null
+        let studentEmail = null; // To store student's entered email
+
+        // Screen elements
+        const loginScreenEl = document.getElementById('login-screen');
+        const startScreenEl = document.getElementById('start-screen');
+        const quizScreenEl = document.getElementById('quiz-screen');
+        const adminPanelScreenEl = document.getElementById('admin-panel-screen');
+
+        // Login elements
+        const studentLoginTab = document.getElementById('student-login-tab');
+        const adminLoginTab = document.getElementById('admin-login-tab');
+        const studentLoginSection = document.getElementById('student-login-section');
+        const adminLoginSection = document.getElementById('admin-login-section');
+        const studentLoginBtn = document.getElementById('student-login-btn');
+        const studentEmailInput = document.getElementById('student-email-input'); // Added
+        const adminLoginForm = document.getElementById('admin-login-form');
+        const adminEmailInput = document.getElementById('admin-email');
+        const adminPasswordInput = document.getElementById('admin-password');
+        const adminLoginError = document.getElementById('admin-login-error');
+        const logoutBtnStudent = document.getElementById('logout-btn-student');
+        const logoutBtnAdmin = document.getElementById('logout-btn-admin');
+        const studentWelcomeMessage = document.getElementById('student-welcome-message'); // Added
+
+        // Quiz elements
+        const startQuizBtn = document.getElementById('start-quiz-btn');
+        const quizContentEl = document.getElementById('quiz-content');
+        const questionTrackerEl = document.getElementById('question-tracker');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const submitBtn = document.getElementById('submit-btn');
+        const flagBtn = document.getElementById('flag-btn');
+        const flagBtnText = document.getElementById('flag-btn-text');
+        const timerEl = document.getElementById('timer');
+        const totalQuestionsInfo = document.getElementById('total-questions-info');
+        const timeLimitInfo = document.getElementById('time-limit-info');
+
+        // Admin Panel elements
+        const uploadQuestionForm = document.getElementById('upload-question-form');
+        const questionTextInput = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const addOptionBtn = document.getElementById('add-option-btn');
+        const questionTopicInput = document.getElementById('question-topic');
+        const questionExplanationInput = document.getElementById('question-explanation');
+        const uploadMessage = document.getElementById('upload-message');
+        const adminQuestionsList = document.getElementById('admin-questions-list'); // Added
+
+        // Modal elements
+        const confirmModal = document.getElementById('confirm-modal');
+        const confirmText = document.getElementById('confirm-text');
+        const cancelSubmitBtn = document.getElementById('cancel-submit-btn');
+        const confirmSubmitBtn = document.getElementById('confirm-submit-btn');
+        const resultsModal = document.getElementById('results-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+
+
+        // --- Firebase Authentication and UI Management ---
+        async function authenticateUser() {
+            // Ensure Firebase variables are available from the window object
+            if (!window.firebaseAuth || !window.firebaseDb || !window.appId || typeof window.initialAuthToken === 'undefined') {
+                console.error("Firebase services or essential variables are not yet available in the window scope.");
+                // You might want to add a small delay and retry, or show a user-friendly message.
+                alert("Firebase services are not fully loaded. Please try refreshing the page.");
+                return;
+            }
+
+            // Assign to local variables once confirmed available
+            auth = window.firebaseAuth;
+            db = window.firebaseDb;
+            currentAppId = window.appId; // Assign to currentAppId
+            initialAuthToken = window.initialAuthToken;
+
+            try {
+                if (initialAuthToken) {
+                    await window.signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await window.signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Firebase authentication error:", error);
+                // Fallback to anonymous if custom token fails
+                try {
+                    await window.signInAnonymously(auth);
+                } catch (anonError) {
+                    console.error("Anonymous authentication failed:", anonError);
+                    alert("Failed to authenticate with Firebase. Please try again later.");
+                }
+            }
+        }
+
+        // This listener should be set up once, after Firebase is initialized
+        // It will fire once on page load if a user is already signed in, or after a sign-in operation.
+        // Ensure window.firebaseAuth is available before setting up the listener
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.firebaseAuth) {
+                window.onAuthStateChanged(window.firebaseAuth, async (user) => {
+                    if (user) {
+                        const adminEmail = "admin@example.com";
+                        if (user.email === adminEmail) {
+                            currentUserRole = 'admin';
+                            showScreen('admin-panel');
+                            await fetchAdminQuestions(); // Fetch questions for admin panel
+                        } else {
+                            currentUserRole = 'student';
+                            showScreen('start');
+                            studentEmail = localStorage.getItem('studentEmail') || 'Guest'; // Retrieve stored email
+                            studentWelcomeMessage.textContent = `Welcome, ${studentEmail}!`;
+                            await fetchQuestions(); // Fetch questions for students
+                            totalQuestionsInfo.textContent = quizData.length;
+                            timeLimitInfo.textContent = TIME_LIMIT_MINUTES;
+                        }
+                    } else {
+                        currentUserRole = null;
+                        showScreen('login');
+                        localStorage.removeItem('studentEmail'); // Clear student email on logout
+                    }
+                });
+                // Initial authentication check after the DOM is ready and listener is set
+                authenticateUser();
+            } else {
+                console.error("Firebase Auth not available on DOMContentLoaded. Script loading order issue.");
+                alert("Critical application component (Firebase Auth) failed to load.");
+            }
+        });
+
+
+        function showScreen(screenName) {
+            loginScreenEl.classList.add('hidden');
+            startScreenEl.classList.add('hidden');
+            quizScreenEl.classList.add('hidden');
+            adminPanelScreenEl.classList.add('hidden');
+
+            if (screenName === 'login') {
+                loginScreenEl.classList.remove('hidden');
+            } else if (screenName === 'start') {
+                startScreenEl.classList.remove('hidden');
+            } else if (screenName === 'quiz') {
+                quizScreenEl.classList.remove('hidden');
+            } else if (screenName === 'admin-panel') {
+                adminPanelScreenEl.classList.remove('hidden');
+            }
+        }
+
+        // --- Login Page Logic ---
+        studentLoginTab.addEventListener('click', () => {
+            studentLoginTab.classList.add('bg-blue-500', 'text-white');
+            studentLoginTab.classList.remove('bg-gray-200', 'text-gray-700');
+            adminLoginTab.classList.remove('bg-blue-500', 'text-white');
+            adminLoginTab.classList.add('bg-gray-200', 'text-gray-700');
+            studentLoginSection.classList.remove('hidden');
+            adminLoginSection.classList.add('hidden');
+            adminLoginError.classList.add('hidden'); // Clear error message
+        });
+
+        adminLoginTab.addEventListener('click', () => {
+            adminLoginTab.classList.add('bg-blue-500', 'text-white');
+            adminLoginTab.classList.remove('bg-gray-200', 'text-gray-700');
+            studentLoginTab.classList.remove('bg-blue-500', 'text-white');
+            studentLoginTab.classList.add('bg-gray-200', 'text-gray-700');
+            adminLoginSection.classList.remove('hidden');
+            studentLoginSection.classList.add('hidden');
+            adminLoginError.classList.add('hidden'); // Clear error message
+        });
+
+        studentLoginBtn.addEventListener('click', async () => {
+            const email = studentEmailInput.value.trim();
+            if (email) {
+                localStorage.setItem('studentEmail', email); // Store email for display
+            } else {
+                localStorage.removeItem('studentEmail');
+            }
+            await authenticateUser(); // Proceed with anonymous authentication
+        });
+
+        adminLoginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = adminEmailInput.value;
+            const password = adminPasswordInput.value;
+            adminLoginError.classList.add('hidden'); // Hide previous error
+
+            try {
+                // Ensure auth object is available
+                if (!auth) {
+                    console.error("Firebase Auth object is not initialized.");
+                    adminLoginError.textContent = "Application error: Firebase Auth not ready.";
+                    adminLoginError.classList.remove('hidden');
+                    return;
+                }
+                await window.signInWithEmailAndPassword(auth, email, password);
+                // User role will be set by onAuthStateChanged listener
+            } catch (error) {
+                console.error("Admin login error:", error.message);
+                adminLoginError.textContent = "Invalid admin credentials. Please try again.";
+                adminLoginError.classList.remove('hidden');
+            }
+        });
+
+        logoutBtnStudent.addEventListener('click', async () => {
+            try {
+                // Ensure auth object is available
+                if (auth) {
+                    await window.signOut(auth);
+                }
+            } catch (error) {
+                console.error("Logout error:", error);
+            }
+        });
+
+        logoutBtnAdmin.addEventListener('click', async () => {
+            try {
+                // Ensure auth object is available
+                if (auth) {
+                    await window.signOut(auth);
+                }
+            } catch (error) {
+                console.error("Logout error:", error);
+            }
+        });
+
+        // --- Firebase Data Operations ---
+        async function fetchQuestions() {
+            quizContentEl.innerHTML = `
+                <div class="flex justify-center items-center h-48">
+                    <div class="spinner"></div>
+                    <p class="ml-4 text-gray-600">Loading questions...</p>
+                </div>
+            `;
+            // Ensure db object is available
+            if (!db) {
+                console.error("Firebase Firestore object is not initialized.");
+                quizContentEl.innerHTML = `<p class="text-center text-red-600">Error: Database not ready. Using default questions.</p>`;
+                quizData = defaultQuizData;
+                userAnswers = new Array(quizData.length).fill(null);
+                flaggedQuestions = new Array(quizData.length).fill(false);
+                currentQuestion = 0;
+                loadQuestion();
+                totalQuestionsInfo.textContent = quizData.length;
+                return;
+            }
+
+            try {
+                const questionsColRef = window.collection(db, `artifacts/${currentAppId}/public/data/questions`); // Use currentAppId
+                const q = window.query(questionsColRef, window.limit(20)); // Fetch up to 20 questions
+                const querySnapshot = await window.getDocs(q);
+                
+                const fetchedQuestions = [];
+                querySnapshot.forEach((doc) => {
+                    fetchedQuestions.push(doc.data());
+                });
+
+                if (fetchedQuestions.length > 0) {
+                    quizData = fetchedQuestions;
+                } else {
+                    quizData = defaultQuizData; // Fallback to default if no questions in Firebase
+                    console.warn("No questions found in Firebase, using default quiz data.");
+                }
+                
+                // Initialize quiz state based on fetched data
+                userAnswers = new Array(quizData.length).fill(null);
+                flaggedQuestions = new Array(quizData.length).fill(false);
+                currentQuestion = 0;
+                loadQuestion(); // Load the first question
+                totalQuestionsInfo.textContent = quizData.length;
+            } catch (error) {
+                console.error("Error fetching questions from Firebase:", error);
+                quizData = defaultQuizData; // Fallback on error
+                userAnswers = new Array(quizData.length).fill(null);
+                flaggedQuestions = new Array(quizData.length).fill(false);
+                currentQuestion = 0;
+                loadQuestion();
+                totalQuestionsInfo.textContent = quizData.length;
+                alert("Failed to load questions from server. Using default questions.");
+            }
+        }
+
+        async function fetchAdminQuestions() {
+            adminQuestionsList.innerHTML = `<p class="text-center text-gray-500">Loading questions...</p>`;
+            if (!db) {
+                console.error("Firebase Firestore object is not initialized for admin fetch.");
+                adminQuestionsList.innerHTML = `<p class="text-center text-red-600">Error: Database not ready to load questions.</p>`;
+                return;
+            }
+            try {
+                const questionsColRef = window.collection(db, `artifacts/${currentAppId}/public/data/questions`);
+                const querySnapshot = await window.getDocs(questionsColRef);
+                const questions = [];
+                querySnapshot.forEach((doc) => {
+                    questions.push({ id: doc.id, ...doc.data() });
+                });
+                renderAdminQuestions(questions);
+            } catch (error) {
+                console.error("Error fetching admin questions:", error);
+                adminQuestionsList.innerHTML = `<p class="text-center text-red-600">Error fetching questions: ${error.message}</p>`;
+            }
+        }
+
+        function renderAdminQuestions(questions) {
+            adminQuestionsList.innerHTML = '';
+            if (questions.length === 0) {
+                adminQuestionsList.innerHTML = `<p class="text-center text-gray-500">No questions uploaded yet.</p>`;
+                return;
+            }
+
+            questions.forEach((q) => {
+                const questionDiv = document.createElement('div');
+                questionDiv.classList.add('border', 'p-4', 'rounded-lg', 'bg-gray-50');
+                
+                let optionsHtml = q.options.map((opt, idx) => {
+                    let isCorrect = '';
+                    if (Array.isArray(q.correct)) {
+                        if (q.correct.includes(idx)) isCorrect = '✅';
+                    } else {
+                        if (q.correct === idx) isCorrect = '✅';
+                    }
+                    return `<li>${opt} ${isCorrect}</li>`;
+                }).join('');
+
+                questionDiv.innerHTML = `
+                    <p class="font-bold text-gray-800 mb-2">${q.question}</p>
+                    <ul class="list-disc list-inside text-gray-700 mb-2">${optionsHtml}</ul>
+                    <p class="text-sm text-gray-600"><strong>Topic:</strong> ${q.topic}</p>
+                    <p class="text-sm text-gray-600"><strong>Explanation:</strong> ${q.explanation}</p>
+                    <button class="btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-lg text-sm mt-3" data-id="${q.id}">Delete</button>
+                `;
+                adminQuestionsList.appendChild(questionDiv);
+            });
+
+            adminQuestionsList.querySelectorAll('button[data-id]').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const questionId = e.target.dataset.id;
+                    if (confirm('Are you sure you want to delete this question?')) { // Using confirm for simplicity, replace with custom modal in production
+                        deleteQuestion(questionId);
+                    }
+                });
+            });
+        }
+
+        async function deleteQuestion(questionId) {
+            if (!db) {
+                console.error("Firebase Firestore object is not initialized for delete.");
+                alert("Error: Database not ready for deletion.");
+                return;
+            }
+            try {
+                await window.deleteDoc(window.doc(db, `artifacts/${currentAppId}/public/data/questions`, questionId));
+                alert('Question deleted successfully!');
+                fetchAdminQuestions(); // Refresh the list
+            } catch (error) {
+                console.error("Error deleting question:", error);
+                alert(`Error deleting question: ${error.message}`);
+            }
+        }
+
+        async function uploadQuestion(question) {
+            if (currentUserRole !== 'admin') {
+                uploadMessage.textContent = "Error: You must be logged in as an admin to upload questions.";
+                uploadMessage.classList.add('text-red-500');
+                return;
+            }
+            // Ensure db object is available
+            if (!db) {
+                console.error("Firebase Firestore object is not initialized for upload.");
+                uploadMessage.textContent = "Error: Database not ready for upload.";
+                uploadMessage.classList.add('text-red-500');
+                return;
+            }
+            try {
+                const questionsColRef = window.collection(db, `artifacts/${currentAppId}/public/data/questions`); // Use currentAppId
+                await window.addDoc(questionsColRef, question);
+                uploadMessage.textContent = "Question uploaded successfully!";
+                uploadMessage.classList.remove('text-red-500');
+                uploadMessage.classList.add('text-green-500');
+                uploadQuestionForm.reset();
+                // Reset options container
+                optionsContainer.innerHTML = `
+                    <div class="flex items-center mb-2">
+                        <input type="text" class="option-input w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Option 1" required>
+                        <input type="checkbox" class="correct-option-checkbox ml-3 w-5 h-5">
+                        <span class="ml-1 text-gray-600 text-sm">Correct</span>
+                    </div>
+                    <div class="flex items-center mb-2">
+                        <input type="text" class="option-input w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Option 2" required>
+                        <input type="checkbox" class="correct-option-checkbox ml-3 w-5 h-5">
+                        <span class="ml-1 text-gray-600 text-sm">Correct</span>
+                    </div>
+                `;
+                fetchAdminQuestions(); // Refresh admin questions list after upload
+            } catch (error) {
+                console.error("Error uploading question:", error);
+                uploadMessage.textContent = `Error uploading question: ${error.message}`;
+                uploadMessage.classList.remove('text-green-500');
+                uploadMessage.classList.add('text-red-500');
+            }
+        }
+
+        // --- Admin Panel Logic ---
+        addOptionBtn.addEventListener('click', () => {
+            const newOptionDiv = document.createElement('div');
+            newOptionDiv.classList.add('flex', 'items-center', 'mb-2');
+            const optionCount = optionsContainer.querySelectorAll('.option-input').length + 1;
+            newOptionDiv.innerHTML = `
+                <input type="text" class="option-input w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Option ${optionCount}" required>
+                <input type="checkbox" class="correct-option-checkbox ml-3 w-5 h-5">
+                <span class="ml-1 text-gray-600 text-sm">Correct</span>
+                <button type="button" class="remove-option-btn ml-2 text-red-500 hover:text-red-700 font-bold text-xl">&times;</button>
+            `;
+            optionsContainer.appendChild(newOptionDiv);
+
+            newOptionDiv.querySelector('.remove-option-btn').addEventListener('click', (e) => {
+                e.target.closest('.flex').remove();
+            });
+        });
+
+        uploadQuestionForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const questionText = questionTextInput.value.trim();
+            const topic = questionTopicInput.value.trim();
+            const explanation = questionExplanationInput.value.trim();
+
+            const optionInputs = optionsContainer.querySelectorAll('.option-input');
+            const correctCheckboxes = optionsContainer.querySelectorAll('.correct-option-checkbox');
+
+            const options = [];
+            const correctIndices = [];
+
+            optionInputs.forEach((input, index) => {
+                const optionValue = input.value.trim();
+                if (optionValue) {
+                    options.push(optionValue);
+                    if (correctCheckboxes[index].checked) {
+                        correctIndices.push(index);
+                    }
+                }
+            });
+
+            if (!questionText || options.length < 2 || !topic || !explanation) {
+                uploadMessage.textContent = "Please fill all fields and provide at least two options.";
+                uploadMessage.classList.add('text-red-500');
+                return;
+            }
+
+            if (correctIndices.length === 0) {
+                uploadMessage.textContent = "Please select at least one correct option.";
+                uploadMessage.classList.add('text-red-500');
+                return;
+            }
+
+            const newQuestion = {
+                question: questionText,
+                options: options,
+                correct: correctIndices.length === 1 ? correctIndices[0] : correctIndices, // Single or multiple correct answers
+                topic: topic,
+                explanation: explanation
+            };
+
+            await uploadQuestion(newQuestion);
+        });
+
+        // --- Quiz Logic (mostly existing, with minor adaptations) ---
+        function startTimer(duration) {
+            let timer = duration, minutes, seconds;
+            timerEl.textContent = `${String(Math.floor(duration/60)).padStart(2, '0')}:${String(duration%60).padStart(2, '0')}`;
+            timerInterval = setInterval(function () {
+                minutes = parseInt(timer / 60, 10);
+                seconds = parseInt(timer % 60, 10);
+
+                minutes = minutes < 10 ? "0" + minutes : minutes;
+                seconds = seconds < 10 ? "0" + seconds : seconds;
+
+                timerEl.textContent = minutes + ":" + seconds;
+
+                if (--timer < 0) {
+                    clearInterval(timerInterval);
+                    submitQuiz(true); // Force submission
+                }
+            }, 1000);
+        }
+
+        function buildQuestionTracker() {
+            questionTrackerEl.innerHTML = '';
+            quizData.forEach((_, index) => {
+                const trackerItem = document.createElement('div');
+                trackerItem.textContent = index + 1;
+                trackerItem.classList.add('question-tracker-item', 'p-2', 'text-center', 'border', 'rounded-md', 'cursor-pointer', 'font-medium', 'text-xs');
+                if (index === currentQuestion) trackerItem.classList.add('active');
+                if (userAnswers[index] !== null && (Array.isArray(userAnswers[index]) ? userAnswers[index].length > 0 : true)) trackerItem.classList.add('answered');
+                if (flaggedQuestions[index]) trackerItem.classList.add('flagged');
+
+                trackerItem.addEventListener('click', () => {
+                    currentQuestion = index;
+                    loadQuestion();
+                });
+                questionTrackerEl.appendChild(trackerItem);
+            });
+        }
+
+        function loadQuestion() {
+            if (quizData.length === 0) {
+                quizContentEl.innerHTML = `<p class="text-center text-gray-600">No questions available. Please check back later or contact admin.</p>`;
+                updateNavButtons();
+                return;
+            }
+
+            const q = quizData[currentQuestion];
+            let optionsHtml = '';
+            const isMultiple = Array.isArray(q.correct);
+
+            q.options.forEach((option, index) => {
+                const inputType = isMultiple ? 'checkbox' : 'radio';
+                let isChecked = '';
+                const savedAnswer = userAnswers[currentQuestion];
+                if (savedAnswer !== null) {
+                    if (isMultiple) {
+                        if (savedAnswer.includes(index)) isChecked = 'checked';
+                    } else {
+                         if (savedAnswer === index) isChecked = 'checked';
+                    }
+                }
+
+                optionsHtml += `
+                    <label class="block mt-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer has-[:checked]:bg-blue-50 has-[:checked]:border-blue-400">
+                        <input type="${inputType}" name="option" value="${index}" class="mr-3" ${isChecked}>
+                        ${option}
+                    </label>
+                `;
+            });
+
+            quizContentEl.innerHTML = `
+                <h2 class="text-xl font-semibold mb-2 text-gray-800">Question ${currentQuestion + 1} of ${quizData.length}</h2>
+                <p class="mb-4 text-gray-700 text-lg">${q.question}</p>
+                <div>${optionsHtml}</div>
+            `;
+
+            const inputs = quizContentEl.querySelectorAll('input');
+            inputs.forEach(input => input.addEventListener('change', saveAnswer));
+
+            updateNavButtons();
+            buildQuestionTracker();
+            updateFlagButton();
+        }
+
+        function saveAnswer() {
+            const q = quizData[currentQuestion];
+            const isMultiple = Array.isArray(q.correct);
+
+            if (isMultiple) {
+                const checkedBoxes = quizContentEl.querySelectorAll('input[type="checkbox"]:checked');
+                userAnswers[currentQuestion] = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
+            } else {
+                const selectedOption = quizContentEl.querySelector('input[name="option"]:checked');
+                userAnswers[currentQuestion] = selectedOption ? parseInt(selectedOption.value) : null;
+            }
+            buildQuestionTracker();
+        }
+
+        function updateNavButtons() {
+            prevBtn.disabled = currentQuestion === 0;
+            prevBtn.classList.toggle('opacity-50', currentQuestion === 0);
+            nextBtn.disabled = currentQuestion === quizData.length - 1;
+            nextBtn.classList.toggle('opacity-50', currentQuestion === quizData.length - 1);
+        }
+
+        function updateFlagButton() {
+            if (flaggedQuestions[currentQuestion]) {
+                flagBtn.classList.add('bg-red-500', 'hover:bg-red-600');
+                flagBtn.classList.remove('bg-yellow-400', 'hover:bg-yellow-500');
+                flagBtnText.textContent = 'Unflag';
+            } else {
+                flagBtn.classList.add('bg-yellow-400', 'hover:bg-yellow-500');
+                flagBtn.classList.remove('bg-red-500', 'hover:bg-red-600');
+                flagBtnText.textContent = 'Flag for Review';
+            }
+        }
+
+        function toggleFlag() {
+            flaggedQuestions[currentQuestion] = !flaggedQuestions[currentQuestion];
+            updateFlagButton();
+            buildQuestionTracker();
+        }
+
+        function showResults() {
+            clearInterval(timerInterval);
+            quizScreenEl.classList.add('hidden');
+            let score = 0;
+            let resultsDetailsHtml = '';
+            const topicStats = {};
+
+            quizData.forEach((q, index) => {
+                if (!topicStats[q.topic]) {
+                    topicStats[q.topic] = { correct: 0, total: 0 };
+                }
+                topicStats[q.topic].total++;
+
+                let isCorrect = false;
+                const userAnswer = userAnswers[index];
+                const isMultiple = Array.isArray(q.correct);
+
+                if (isMultiple) {
+                    isCorrect = userAnswer && userAnswer.length === q.correct.length && userAnswer.every(val => q.correct.includes(val)) && q.correct.every(val => userAnswer.includes(val));
+                } else {
+                    isCorrect = userAnswer === q.correct;
+                }
+
+                if (isCorrect) {
+                    score++;
+                    topicStats[q.topic].correct++;
+                }
+
+                let correctAnswerText = '';
+                if (isMultiple) {
+                     correctAnswerText = q.correct.map(i => q.options[i]).join(', ');
+                } else {
+                    correctAnswerText = q.options[q.correct];
+                }
+
+                let userAnswerText = 'Not Answered';
+                if(userAnswer !== null && (isMultiple ? userAnswer.length > 0 : true)) {
+                    if (isMultiple) {
+                        userAnswerText = userAnswer.map(i => q.options[i]).join(', ');
+                    } else {
+                        userAnswerText = q.options[userAnswer];
+                    }
+                }
+
+                resultsDetailsHtml += `
+                    <div class="p-4 mb-4 border rounded-lg ${isCorrect ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}">
+                        <p class="font-bold text-gray-800">Q${index + 1}: ${q.question}</p>
+                        <p class="mt-2">Your answer: <span class="font-semibold ${isCorrect ? 'text-green-700' : 'text-red-700'}">${userAnswerText}</span></p>
+                        ${!isCorrect ? `<p>Correct answer: <span class="font-semibold text-green-700">${correctAnswerText}</span></p>` : ''}
+                        <div class="explanation">
+                            <strong>Explanation:</strong> ${q.explanation}
+                        </div>
+                    </div>
+                `;
+            });
+
+            const percentage = (score / quizData.length) * 100;
+            document.getElementById('score').textContent = `Your Score: ${score} / ${quizData.length}`;
+            document.getElementById('percentage').textContent = `Percentage: ${percentage.toFixed(1)}%`;
+
+            const practiceList = document.getElementById('practice-list');
+            practiceList.innerHTML = '';
+
+            const topicLabels = Object.keys(topicStats);
+            const topicScores = topicLabels.map(topic => {
+                const percentage = (topicStats[topic].correct / topicStats[topic].total) * 100;
+                if (percentage < 75 && topicStats[topic].total > 1) { // Only suggest topics with more than one question and less than 75% score
+                    const li = document.createElement('li');
+                    li.textContent = `${topic} (Score: ${percentage.toFixed(0)}%)`;
+                    practiceList.appendChild(li);
+                }
+                return percentage;
+            });
+
+            if (practiceList.children.length === 0) {
+                 practiceList.innerHTML = '<li>Great job! No specific topics need review.</li>';
+            }
+
+            document.getElementById('results-details').innerHTML = resultsDetailsHtml;
+
+            const ctx = document.getElementById('topicChart').getContext('2d');
+            if(topicChart) {
+                topicChart.destroy();
+            }
+            topicChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topicLabels,
+                    datasets: [{
+                        label: 'Percentage Correct by Topic (%)',
+                        data: topicScores,
+                        backgroundColor: topicScores.map(p => p >= 75 ? 'rgba(22, 163, 74, 0.7)' : p >= 50 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                        borderColor: topicScores.map(p => p >= 75 ? 'rgba(22, 163, 74, 1)' : p >= 50 ? 'rgba(245, 158, 11, 1)' : 'rgba(239, 68, 68, 1)'),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    scales: {
+                        x: { beginAtZero: true, max: 100, ticks: { callback: value => value + "%" } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            resultsModal.classList.remove('hidden');
+            resultsModal.style.opacity = 1;
+        }
+
+        function submitQuiz(isTimeUp = false) {
+            const unansweredCount = userAnswers.filter(a => a === null || (Array.isArray(a) && a.length === 0)).length;
+            if (unansweredCount > 0 && !isTimeUp) {
+                confirmText.textContent = `You have ${unansweredCount} unanswered questions. Are you sure you want to submit?`;
+                confirmModal.classList.remove('hidden');
+                confirmModal.style.opacity = 1;
+            } else {
+                showResults();
+            }
+        }
+
+        // --- Event Listeners ---
+        startQuizBtn.addEventListener('click', () => {
+            showScreen('quiz');
+            startTimer(TIME_LIMIT_MINUTES * 60);
+            loadQuestion();
+        });
+
+        prevBtn.addEventListener('click', () => { if (currentQuestion > 0) { currentQuestion--; loadQuestion(); } });
+        nextBtn.addEventListener('click', () => { if (currentQuestion < quizData.length - 1) { currentQuestion++; loadQuestion(); } });
+        submitBtn.addEventListener('click', () => submitQuiz(false));
+        flagBtn.addEventListener('click', toggleFlag);
+
+        cancelSubmitBtn.addEventListener('click', () => {
+            confirmModal.style.opacity = 0;
+            setTimeout(() => confirmModal.classList.add('hidden'), 300);
+        });
+
+        confirmSubmitBtn.addEventListener('click', () => {
+            confirmModal.style.opacity = 0;
+            setTimeout(() => confirmModal.classList.add('hidden'), 300);
+            showResults();
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            resultsModal.style.opacity = 0;
+            setTimeout(() => resultsModal.classList.add('hidden'), 300);
+            // After reviewing, go back to start screen for students
+            if (currentUserRole === 'student') {
+                showScreen('start');
+            }
+        });
+
+    </script>
+</body>
+</html>
